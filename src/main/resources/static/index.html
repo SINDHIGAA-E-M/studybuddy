@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>StudyBuddy – Dashboard</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<nav>
+  <a class="brand" href="index.html">📚 StudyBuddy</a>
+  <a href="index.html" class="active">Dashboard</a>
+  <a href="students.html">Students</a>
+  <a href="subjects.html">Subjects</a>
+  <a href="groups.html">Groups</a>
+  <a href="join.html">Join Group</a>
+</nav>
+
+<div class="container">
+  <h2>Dashboard</h2>
+
+  <div class="cards">
+    <div class="card"><div class="label">Total Students</div><div class="value" id="totalStudents">–</div></div>
+    <div class="card"><div class="label">Total Subjects</div><div class="value" id="totalSubjects">–</div></div>
+    <div class="card"><div class="label">Total Study Groups</div><div class="value" id="totalGroups">–</div></div>
+    <div class="card"><div class="label">Total Memberships</div><div class="value" id="totalMemberships">–</div></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" onclick="location.href='students.html'">+ Add Student</button>
+    <button class="btn btn-success" onclick="location.href='subjects.html'">+ Add Subject</button>
+    <button class="btn btn-warning" onclick="location.href='groups.html'">+ Create Study Group</button>
+    <button class="btn btn-outline" onclick="location.href='students.html'">View Students</button>
+    <button class="btn btn-outline" onclick="location.href='subjects.html'">View Subjects</button>
+    <button class="btn btn-outline" onclick="location.href='groups.html'">View Groups</button>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <div class="section-header"><h2>Recent Students</h2></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>Email</th></tr></thead>
+          <tbody id="recentStudents"><tr><td colspan="3">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <div class="section-header"><h2>Recent Study Groups</h2></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>Subject</th><th>Status</th></tr></thead>
+          <tbody id="recentGroups"><tr><td colspan="4">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-header"><h2>Available Groups</h2></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>Name</th><th>Subject</th><th>Max</th><th>Members</th><th>Seats</th><th>Status</th></tr></thead>
+      <tbody id="availableGroups"><tr><td colspan="7">Loading...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = '';
+
+async function load() {
+  const [students, subjects, groups, memberships] = await Promise.all([
+    fetch(`${API}/students`).then(r => r.json()),
+    fetch(`${API}/subjects`).then(r => r.json()),
+    fetch(`${API}/groups`).then(r => r.json()),
+    fetch(`${API}/groups`).then(r => r.json())
+  ]);
+
+  document.getElementById('totalStudents').textContent = students.length;
+  document.getElementById('totalSubjects').textContent = subjects.length;
+  document.getElementById('totalGroups').textContent = groups.length;
+
+  // Count memberships
+  let total = 0;
+  const counts = await Promise.all(groups.map(g => fetch(`${API}/groups/${g.id}/count`).then(r => r.json())));
+  counts.forEach(c => total += c);
+  document.getElementById('totalMemberships').textContent = total;
+
+  // Recent students (last 5)
+  const rs = students.slice(-5).reverse();
+  document.getElementById('recentStudents').innerHTML = rs.length
+    ? rs.map(s => `<tr><td>${s.id}</td><td>${s.name}</td><td>${s.email}</td></tr>`).join('')
+    : '<tr><td colspan="3">No students yet</td></tr>';
+
+  // Groups with counts
+  const groupCounts = {};
+  groups.forEach((g, i) => groupCounts[g.id] = counts[i]);
+
+  const rg = groups.slice(-5).reverse();
+  document.getElementById('recentGroups').innerHTML = rg.length
+    ? rg.map(g => {
+        const c = groupCounts[g.id] || 0;
+        const full = c >= g.maxMembers;
+        return `<tr><td>${g.id}</td><td>${g.name}</td><td>${g.subject?.name||''}</td>
+          <td><span class="badge ${full?'badge-full':'badge-open'}">${full?'FULL':'OPEN'}</span></td></tr>`;
+      }).join('')
+    : '<tr><td colspan="4">No groups yet</td></tr>';
+
+  document.getElementById('availableGroups').innerHTML = groups.length
+    ? groups.map(g => {
+        const c = groupCounts[g.id] || 0;
+        const full = c >= g.maxMembers;
+        const seats = g.maxMembers - c;
+        return `<tr><td>${g.id}</td><td>${g.name}</td><td>${g.subject?.name||''}</td>
+          <td>${g.maxMembers}</td><td>${c}</td><td>${seats}</td>
+          <td><span class="badge ${full?'badge-full':'badge-open'}">${full?'FULL':'OPEN'}</span></td></tr>`;
+      }).join('')
+    : '<tr><td colspan="7">No groups yet</td></tr>';
+}
+
+load();
+</script>
+</body>
+</html>

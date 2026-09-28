@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>StudyBuddy – Join Group</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<nav>
+  <a class="brand" href="index.html">📚 StudyBuddy</a>
+  <a href="index.html">Dashboard</a>
+  <a href="students.html">Students</a>
+  <a href="subjects.html">Subjects</a>
+  <a href="groups.html">Groups</a>
+  <a href="join.html" class="active">Join Group</a>
+</nav>
+
+<div class="container">
+  <h2>Join a Study Group</h2>
+
+  <div class="form-card" style="max-width:500px;">
+    <div class="form-group" style="margin-bottom:14px;">
+      <label>Select Student *</label>
+      <select id="selStudent"><option value="">-- Select Student --</option></select>
+    </div>
+    <div class="form-group" style="margin-bottom:14px;">
+      <label>Select Study Group *</label>
+      <select id="selGroup"><option value="">-- Select Study Group --</option></select>
+    </div>
+    <div id="joinMsg" style="font-size:0.88rem;margin-bottom:12px;"></div>
+    <button class="btn btn-success" onclick="joinGroup()">Join Group</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const params = new URLSearchParams(location.search);
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  setTimeout(() => t.className = '', 3500);
+}
+
+async function loadDropdowns() {
+  const [students, groups] = await Promise.all([
+    fetch('/students').then(r => r.json()),
+    fetch('/groups').then(r => r.json())
+  ]);
+
+  const counts = await Promise.all(groups.map(g => fetch(`/groups/${g.id}/count`).then(r => r.json())));
+
+  document.getElementById('selStudent').innerHTML =
+    '<option value="">-- Select Student --</option>' +
+    students.map(s => `<option value="${s.id}">${s.name} (${s.email})</option>`).join('');
+
+  document.getElementById('selGroup').innerHTML =
+    '<option value="">-- Select Study Group --</option>' +
+    groups.map((g, i) => {
+      const full = counts[i] >= g.maxMembers;
+      return `<option value="${g.id}" ${full?'disabled':''}>
+        ${g.name} – ${g.subject?.name||''} (${counts[i]}/${g.maxMembers})${full?' [FULL]':''}
+      </option>`;
+    }).join('');
+
+  // Pre-select group if passed via URL
+  const preGroup = params.get('groupId');
+  if (preGroup) document.getElementById('selGroup').value = preGroup;
+}
+
+async function joinGroup() {
+  const studentId = document.getElementById('selStudent').value;
+  const groupId = document.getElementById('selGroup').value;
+  const msg = document.getElementById('joinMsg');
+  if (!studentId) { msg.style.color='#ea4335'; msg.textContent='Please select a student'; return; }
+  if (!groupId) { msg.style.color='#ea4335'; msg.textContent='Please select a study group'; return; }
+  msg.textContent = '';
+  const res = await fetch(`/groups/${groupId}/join/${studentId}`, { method: 'POST' });
+  const data = await res.json();
+  if (res.ok) {
+    msg.style.color = '#34a853';
+    msg.textContent = data.message;
+    showToast(data.message);
+    loadDropdowns();
+  } else {
+    msg.style.color = '#ea4335';
+    msg.textContent = data.message;
+  }
+}
+
+loadDropdowns();
+</script>
+</body>
+</html>

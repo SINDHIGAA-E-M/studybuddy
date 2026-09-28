@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>StudyBuddy – Group Detail</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<nav>
+  <a class="brand" href="index.html">📚 StudyBuddy</a>
+  <a href="index.html">Dashboard</a>
+  <a href="students.html">Students</a>
+  <a href="subjects.html">Subjects</a>
+  <a href="groups.html" class="active">Groups</a>
+  <a href="join.html">Join Group</a>
+</nav>
+
+<div class="container">
+  <div style="margin-bottom:16px;">
+    <button class="btn btn-outline btn-sm" onclick="history.back()">← Back</button>
+  </div>
+
+  <h2 id="groupTitle">Group Detail</h2>
+
+  <div class="grid2" style="margin-bottom:24px;">
+    <div class="info-card">
+      <p>Group Name: <span id="gName">–</span></p>
+      <p>Subject: <span id="gSubject">–</span></p>
+      <p>Max Members: <span id="gMax">–</span></p>
+      <p>Current Members: <span id="gCurrent">–</span></p>
+      <p>Available Seats: <span id="gSeats">–</span></p>
+      <p>Status: <span id="gStatus">–</span></p>
+    </div>
+    <div class="info-card">
+      <h3 style="margin-bottom:14px;color:#1a73e8;">Join Student</h3>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Select Student</label>
+        <select id="joinStudent"><option value="">-- Select Student --</option></select>
+      </div>
+      <div id="joinError" style="color:#ea4335;font-size:0.85rem;margin-bottom:8px;"></div>
+      <button class="btn btn-success" onclick="joinStudent()">Join Group</button>
+    </div>
+  </div>
+
+  <div class="section-header"><h2>Members</h2></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Student ID</th><th>Student Name</th><th>Email</th><th>Action</th></tr></thead>
+      <tbody id="memberTable"><tr><td colspan="4">Loading...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const groupId = params.get('id');
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  setTimeout(() => t.className = '', 3500);
+}
+
+async function loadGroup() {
+  const [gRes, countRes, membersRes, studentsRes] = await Promise.all([
+    fetch(`/groups/${groupId}`),
+    fetch(`/groups/${groupId}/count`),
+    fetch(`/groups/${groupId}/members`),
+    fetch('/students')
+  ]);
+  const g = await gRes.json();
+  const count = await countRes.json();
+  const members = await membersRes.json();
+  const students = await studentsRes.json();
+
+  document.getElementById('groupTitle').textContent = g.name;
+  document.getElementById('gName').textContent = g.name;
+  document.getElementById('gSubject').textContent = g.subject?.name || '–';
+  document.getElementById('gMax').textContent = g.maxMembers;
+  document.getElementById('gCurrent').textContent = count;
+  document.getElementById('gSeats').textContent = g.maxMembers - count;
+  const full = count >= g.maxMembers;
+  document.getElementById('gStatus').innerHTML =
+    `<span class="badge ${full?'badge-full':'badge-open'}">${full?'FULL':'OPEN'}</span>`;
+
+  // Populate join dropdown (exclude already members)
+  const memberIds = new Set(members.map(m => m.student.id));
+  const available = students.filter(s => !memberIds.has(s.id));
+  const sel = document.getElementById('joinStudent');
+  sel.innerHTML = '<option value="">-- Select Student --</option>' +
+    available.map(s => `<option value="${s.id}">${s.name} (${s.email})</option>`).join('');
+
+  // Members table
+  const tbody = document.getElementById('memberTable');
+  if (!members.length) { tbody.innerHTML = '<tr><td colspan="4">No members yet</td></tr>'; return; }
+  tbody.innerHTML = members.map(m => `
+    <tr>
+      <td>${m.student.id}</td><td>${m.student.name}</td><td>${m.student.email}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="removeMember(${m.student.id},'${m.student.name}')">Remove</button></td>
+    </tr>`).join('');
+}
+
+async function joinStudent() {
+  const studentId = document.getElementById('joinStudent').value;
+  const err = document.getElementById('joinError');
+  if (!studentId) { err.textContent = 'Please select a student'; return; }
+  err.textContent = '';
+  const res = await fetch(`/groups/${groupId}/join/${studentId}`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) { err.textContent = data.message; return; }
+  showToast(data.message);
+  loadGroup();
+}
+
+async function removeMember(studentId, name) {
+  if (!confirm(`Remove "${name}" from this group?`)) return;
+  const res = await fetch(`/groups/${groupId}/members/${studentId}`, { method: 'DELETE' });
+  const data = await res.json();
+  showToast(data.message, res.ok ? 'success' : 'error');
+  if (res.ok) loadGroup();
+}
+
+if (groupId) loadGroup();
+else document.getElementById('groupTitle').textContent = 'Group not found';
+</script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>StudyBuddy – Subjects</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<nav>
+  <a class="brand" href="index.html">📚 StudyBuddy</a>
+  <a href="index.html">Dashboard</a>
+  <a href="students.html">Students</a>
+  <a href="subjects.html" class="active">Subjects</a>
+  <a href="groups.html">Groups</a>
+  <a href="join.html">Join Group</a>
+</nav>
+
+<div class="container">
+  <h2>Subject Management</h2>
+
+  <div class="form-card">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Subject Name *</label>
+        <input type="text" id="subName" placeholder="Enter subject name"/>
+      </div>
+      <div style="display:flex;align-items:flex-end;">
+        <button class="btn btn-primary" onclick="saveSubject()">Save Subject</button>
+      </div>
+    </div>
+    <div id="formError" style="color:#ea4335;font-size:0.85rem;margin-top:4px;"></div>
+  </div>
+
+  <div class="section-header"><h2>All Subjects</h2></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>Subject Name</th><th>Actions</th></tr></thead>
+      <tbody id="subjectTable"><tr><td colspan="3">Loading...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3>Edit Subject</h3>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>Subject Name *</label>
+      <input type="text" id="editName"/>
+    </div>
+    <div id="editError" style="color:#ea4335;font-size:0.85rem;margin-bottom:8px;"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitEdit()">Update</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let editId = null;
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  setTimeout(() => t.className = '', 3500);
+}
+
+async function loadSubjects() {
+  const res = await fetch('/subjects');
+  const data = await res.json();
+  const tbody = document.getElementById('subjectTable');
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="3">No subjects found</td></tr>'; return; }
+  tbody.innerHTML = data.map(s => `
+    <tr>
+      <td>${s.id}</td><td>${s.name}</td>
+      <td>
+        <button class="btn btn-warning btn-sm" onclick="openEdit(${s.id},'${s.name}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteSubject(${s.id},'${s.name}')">Delete</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function saveSubject() {
+  const name = document.getElementById('subName').value.trim();
+  const err = document.getElementById('formError');
+  if (!name) { err.textContent = 'Subject name is required'; return; }
+  err.textContent = '';
+  const res = await fetch('/subjects', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name})
+  });
+  const data = await res.json();
+  if (!res.ok) { err.textContent = data.message || 'Error'; return; }
+  document.getElementById('subName').value = '';
+  showToast('Subject added successfully');
+  loadSubjects();
+}
+
+function openEdit(id, name) {
+  editId = id;
+  document.getElementById('editName').value = name;
+  document.getElementById('editError').textContent = '';
+  document.getElementById('editModal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.remove('show');
+  editId = null;
+}
+
+async function submitEdit() {
+  const name = document.getElementById('editName').value.trim();
+  const err = document.getElementById('editError');
+  if (!name) { err.textContent = 'Subject name is required'; return; }
+  err.textContent = '';
+  const res = await fetch(`/subjects/${editId}`, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name})
+  });
+  const data = await res.json();
+  if (!res.ok) { err.textContent = data.message || 'Error'; return; }
+  closeModal();
+  showToast('Subject updated successfully');
+  loadSubjects();
+}
+
+async function deleteSubject(id, name) {
+  if (!confirm(`Delete subject "${name}"?`)) return;
+  const res = await fetch(`/subjects/${id}`, { method: 'DELETE' });
+  const data = await res.json();
+  showToast(data.message, res.ok ? 'success' : 'error');
+  if (res.ok) loadSubjects();
+}
+
+loadSubjects();
+</script>
+</body>
+</html>

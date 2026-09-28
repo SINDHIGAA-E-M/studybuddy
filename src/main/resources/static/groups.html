@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>StudyBuddy – Groups</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<nav>
+  <a class="brand" href="index.html">📚 StudyBuddy</a>
+  <a href="index.html">Dashboard</a>
+  <a href="students.html">Students</a>
+  <a href="subjects.html">Subjects</a>
+  <a href="groups.html" class="active">Groups</a>
+  <a href="join.html">Join Group</a>
+</nav>
+
+<div class="container">
+  <h2>Study Group Management</h2>
+
+  <div class="form-card">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Group Name *</label>
+        <input type="text" id="gName" placeholder="Enter group name"/>
+      </div>
+      <div class="form-group">
+        <label>Max Members *</label>
+        <input type="number" id="gMax" placeholder="e.g. 5" min="1"/>
+      </div>
+      <div class="form-group">
+        <label>Subject *</label>
+        <select id="gSubject"><option value="">-- Select Subject --</option></select>
+      </div>
+      <div style="display:flex;align-items:flex-end;">
+        <button class="btn btn-primary" onclick="saveGroup()">Save Group</button>
+      </div>
+    </div>
+    <div id="formError" style="color:#ea4335;font-size:0.85rem;margin-top:4px;"></div>
+  </div>
+
+  <div class="section-header"><h2>All Study Groups</h2></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Subject</th><th>Max</th><th>Members</th><th>Seats</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="groupTable"><tr><td colspan="8">Loading...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3>Edit Study Group</h3>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>Group Name *</label>
+      <input type="text" id="editName"/>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>Max Members *</label>
+      <input type="number" id="editMax" min="1"/>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>Subject</label>
+      <select id="editSubject"></select>
+    </div>
+    <div id="editError" style="color:#ea4335;font-size:0.85rem;margin-bottom:8px;"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitEdit()">Update</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let editId = null;
+let subjects = [];
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  setTimeout(() => t.className = '', 3500);
+}
+
+async function loadSubjects() {
+  const res = await fetch('/subjects');
+  subjects = await res.json();
+  const sel = document.getElementById('gSubject');
+  sel.innerHTML = '<option value="">-- Select Subject --</option>' +
+    subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+async function loadGroups() {
+  const res = await fetch('/groups');
+  const groups = await res.json();
+  const tbody = document.getElementById('groupTable');
+  if (!groups.length) { tbody.innerHTML = '<tr><td colspan="8">No groups found</td></tr>'; return; }
+
+  const counts = await Promise.all(groups.map(g => fetch(`/groups/${g.id}/count`).then(r => r.json())));
+
+  tbody.innerHTML = groups.map((g, i) => {
+    const c = counts[i];
+    const full = c >= g.maxMembers;
+    const seats = g.maxMembers - c;
+    return `<tr>
+      <td>${g.id}</td><td>${g.name}</td><td>${g.subject?.name||''}</td>
+      <td>${g.maxMembers}</td><td>${c}</td><td>${seats}</td>
+      <td><span class="badge ${full?'badge-full':'badge-open'}">${full?'FULL':'OPEN'}</span></td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="location.href='group-detail.html?id=${g.id}'">View</button>
+        <button class="btn btn-warning btn-sm" onclick="openEdit(${g.id},'${g.name}',${g.maxMembers},${g.subject?.id||0})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteGroup(${g.id},'${g.name}')">Delete</button>
+        <button class="btn btn-success btn-sm" onclick="location.href='join.html?groupId=${g.id}'">Join</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function saveGroup() {
+  const name = document.getElementById('gName').value.trim();
+  const maxMembers = parseInt(document.getElementById('gMax').value);
+  const subjectId = document.getElementById('gSubject').value;
+  const err = document.getElementById('formError');
+  if (!name) { err.textContent = 'Group name is required'; return; }
+  if (!maxMembers || maxMembers < 1) { err.textContent = 'Max members must be greater than 0'; return; }
+  if (!subjectId) { err.textContent = 'Please select a subject'; return; }
+  err.textContent = '';
+  const res = await fetch(`/groups?subjectId=${subjectId}`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name, maxMembers})
+  });
+  const data = await res.json();
+  if (!res.ok) { err.textContent = data.message || 'Error'; return; }
+  document.getElementById('gName').value = '';
+  document.getElementById('gMax').value = '';
+  document.getElementById('gSubject').value = '';
+  showToast('Study group created successfully');
+  loadGroups();
+}
+
+function openEdit(id, name, maxMembers, subjectId) {
+  editId = id;
+  document.getElementById('editName').value = name;
+  document.getElementById('editMax').value = maxMembers;
+  const sel = document.getElementById('editSubject');
+  sel.innerHTML = subjects.map(s => `<option value="${s.id}" ${s.id==subjectId?'selected':''}>${s.name}</option>`).join('');
+  document.getElementById('editError').textContent = '';
+  document.getElementById('editModal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.remove('show');
+  editId = null;
+}
+
+async function submitEdit() {
+  const name = document.getElementById('editName').value.trim();
+  const maxMembers = parseInt(document.getElementById('editMax').value);
+  const subjectId = document.getElementById('editSubject').value;
+  const err = document.getElementById('editError');
+  if (!name) { err.textContent = 'Group name is required'; return; }
+  if (!maxMembers || maxMembers < 1) { err.textContent = 'Max members must be greater than 0'; return; }
+  err.textContent = '';
+  const url = subjectId ? `/groups/${editId}?subjectId=${subjectId}` : `/groups/${editId}`;
+  const res = await fetch(url, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name, maxMembers})
+  });
+  const data = await res.json();
+  if (!res.ok) { err.textContent = data.message || 'Error'; return; }
+  closeModal();
+  showToast('Study group updated successfully');
+  loadGroups();
+}
+
+async function deleteGroup(id, name) {
+  if (!confirm(`Delete group "${name}"? All memberships will be removed.`)) return;
+  const res = await fetch(`/groups/${id}`, { method: 'DELETE' });
+  const data = await res.json();
+  showToast(data.message, res.ok ? 'success' : 'error');
+  if (res.ok) loadGroups();
+}
+
+loadSubjects();
+loadGroups();
+</script>
+</body>
+</html>
